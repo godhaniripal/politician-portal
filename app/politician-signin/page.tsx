@@ -2,31 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, User, Eye, EyeOff } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Header } from "./header"; // Import your existing header
+import { useSupabase } from "@/components/AuthProvider";
 
-export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+export default function SignInPage() {
+  const supabase = useSupabase();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    name: "",
   });
   const [errors, setErrors] = useState({
     email: "",
     password: "",
-    name: "",
   });
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const validateForm = () => {
     let valid = true;
-    const newErrors = { email: "", password: "", name: "" };
+    const newErrors = { email: "", password: "" };
 
     if (!formData.email) {
       newErrors.email = "Email is required";
@@ -38,14 +36,6 @@ export default function AuthPage() {
 
     if (!formData.password) {
       newErrors.password = "Password is required";
-      valid = false;
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-      valid = false;
-    }
-
-    if (!isLogin && !formData.name) {
-      newErrors.name = "Name is required";
       valid = false;
     }
 
@@ -60,30 +50,23 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      // Replace with your actual API call
-      const response = await fetch(`/api/${isLogin ? "login" : "signup"}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
+      const { error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        router.push("/dashboard"); // Redirect on success
-      } else {
-        // Handle API errors
+      if (error) {
         setErrors((prev) => ({
           ...prev,
-          email: data.error || "An error occurred",
+          email: error.message,
         }));
+      } else {
+        router.push("/dashboard");
       }
     } catch (error) {
       setErrors((prev) => ({
         ...prev,
-        email: "Network error. Please try again.",
+        email: "An error occurred. Please try again.",
       }));
     } finally {
       setIsLoading(false);
@@ -93,7 +76,6 @@ export default function AuthPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user types
     if (errors[name as keyof typeof errors]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -101,42 +83,16 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      
       <div className="flex flex-1 items-center justify-center bg-muted/40 p-4">
         <div className="w-full max-w-md rounded-lg bg-background p-8 shadow-lg border">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold mb-2">
-              {isLogin ? "Welcome back" : "Create an account"}
-            </h1>
+            <h1 className="text-2xl font-bold mb-2">Welcome back</h1>
             <p className="text-foreground/60">
-              {isLogin
-                ? "Enter your credentials to access your account"
-                : "Get started with Project M"}
+              Enter your credentials to access your account
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <div className="relative">
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className={errors.name ? "border-destructive" : ""}
-                  />
-                  <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                </div>
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name}</p>
-                )}
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -186,48 +142,35 @@ export default function AuthPage() {
               )}
             </div>
 
-            {isLogin && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="text-sm text-primary hover:underline"
-                  onClick={() => {
-                    // Handle forgot password
-                  }}
-                >
-                  Forgot password?
-                </button>
-              </div>
-            )}
+            <div className="flex justify-end">
+              <Button
+                variant="link"
+                className="text-sm text-primary p-0 h-auto"
+                onClick={() => router.push("/forgot-password")}
+              >
+                Forgot password?
+              </Button>
+            </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-              ) : isLogin ? (
-                "Sign In"
               ) : (
-                "Sign Up"
+                "Sign In"
               )}
             </Button>
           </form>
 
           <div className="mt-4 text-center text-sm">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setErrors({ email: "", password: "", name: "" });
-              }}
+            Don't have an account?{" "}
+            <Button
+              variant="link"
+              className="text-primary p-0 h-auto"
+              onClick={() => router.push("/politician-signup")}
             >
-              {isLogin ? "Sign up" : "Sign in"}
-            </button>
+              Sign up
+            </Button>
           </div>
-
-          
-
-          
         </div>
       </div>
     </div>

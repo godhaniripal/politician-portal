@@ -4,6 +4,7 @@ import { Poppins } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
+import SupabaseProvider from '@/components/AuthProvider';
 
 const poppins = Poppins({ 
   weight: ['300', '400', '500', '600', '700'],
@@ -30,9 +31,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Header />
-          <main>{children}</main>
-          <Footer />
+          <SupabaseProvider>
+            <Header />
+            <main>{children}</main>
+            <Footer />
+          </SupabaseProvider>
         </ThemeProvider>
       </body>
     </html>

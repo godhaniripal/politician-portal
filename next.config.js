@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // Removing "output: 'export'" to support API routes
   eslint: {
     ignoreDuringBuilds: true,
   },

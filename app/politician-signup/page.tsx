@@ -6,10 +6,11 @@ import { Lock, Mail, User, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Header } from "./header"; // Import your existing header
+import { useSupabase } from "@/components/AuthProvider";
 
-export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+export default function SignUpPage() {
+  const supabase = useSupabase();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -22,7 +23,7 @@ export default function AuthPage() {
     name: "",
   });
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [verificationCode, setVerificationCode] = useState(""); // For demo purposes
 
   const validateForm = () => {
     let valid = true;
@@ -44,7 +45,7 @@ export default function AuthPage() {
       valid = false;
     }
 
-    if (!isLogin && !formData.name) {
+    if (!formData.name) {
       newErrors.name = "Name is required";
       valid = false;
     }
@@ -58,32 +59,84 @@ export default function AuthPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
+    setErrors({ email: "", password: "", name: "" });
 
     try {
-      // Replace with your actual API call
-      const response = await fetch(`/api/${isLogin ? "login" : "signup"}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email === formData.email) {
+        throw new Error('This email is already registered');
+      }
+
+
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('email')
+        .eq('email', formData.email)
+        .single();
+
+      if (existingUser) {
+        throw new Error('This email is already registered');
+      }
+
+
+      const { error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name,
+          }
+        }
       });
 
-      const data = await response.json();
+      if (authError) throw authError;
 
-      if (response.ok) {
-        router.push("/dashboard"); // Redirect on success
-      } else {
-        // Handle API errors
-        setErrors((prev) => ({
-          ...prev,
-          email: data.error || "An error occurred",
-        }));
+
+      const { error: dbError } = await supabase
+        .from('users')
+        .insert({
+          email: formData.email,
+          full_name: formData.name,
+          email_confirmed: false
+        });
+
+      if (dbError) throw dbError;
+
+
+      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+      setVerificationCode(generatedCode); // For demo only
+      console.log(`Verification code for ${formData.email}: ${generatedCode}`);
+
+  
+      const { error: codeError } = await supabase
+        .from('verification_codes')
+        .insert({
+          email: formData.email,
+          code: generatedCode,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        });
+
+      if (codeError) throw codeError;
+
+
+      router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
+
+    } catch (error: any) {
+      let errorMessage = error.message;
+      
+
+      if (error.message.includes('User already registered')) {
+        errorMessage = 'This email is already registered';
+      } else if (error.message.includes('password')) {
+        errorMessage = 'Password requirements not met';
+      } else if (error.message.includes('duplicate key')) {
+        errorMessage = 'This email is already registered';
       }
-    } catch (error) {
-      setErrors((prev) => ({
+
+      setErrors(prev => ({
         ...prev,
-        email: "Network error. Please try again.",
+        email: errorMessage || 'Sign up failed. Please try again.'
       }));
     } finally {
       setIsLoading(false);
@@ -93,7 +146,6 @@ export default function AuthPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user types
     if (errors[name as keyof typeof errors]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -101,41 +153,41 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      
       <div className="flex flex-1 items-center justify-center bg-muted/40 p-4">
         <div className="w-full max-w-md rounded-lg bg-background p-8 shadow-lg border">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold mb-2">
-              {isLogin ? "Welcome back" : "Create an account"}
-            </h1>
-            <p className="text-foreground/60">
-              {isLogin
-                ? "Enter your credentials to access your account"
-                : "Get started with Project M"}
-            </p>
+            <h1 className="text-2xl font-bold mb-2">Create an account</h1>
+            <p className="text-foreground/60">Get started with Indian Political Transparency Portal</p>
           </div>
 
+      
+          {verificationCode && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+              <p className="font-medium text-yellow-800">Demo Only</p>
+              <p className="text-yellow-700">Verification code: {verificationCode}</p>
+              <p className="text-yellow-600">(In production, this would be sent via email)</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <div className="relative">
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className={errors.name ? "border-destructive" : ""}
-                  />
-                  <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                </div>
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name}</p>
-                )}
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <div className="relative">
+                <Input
+                  id="name"
+                  name="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={errors.name ? "border-destructive" : ""}
+                />
+                <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
               </div>
-            )}
+              {errors.name && (
+                <p className="text-sm text-destructive">{errors.name}</p>
+              )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -186,25 +238,9 @@ export default function AuthPage() {
               )}
             </div>
 
-            {isLogin && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="text-sm text-primary hover:underline"
-                  onClick={() => {
-                    // Handle forgot password
-                  }}
-                >
-                  Forgot password?
-                </button>
-              </div>
-            )}
-
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-              ) : isLogin ? (
-                "Sign In"
               ) : (
                 "Sign Up"
               )}
@@ -212,22 +248,15 @@ export default function AuthPage() {
           </form>
 
           <div className="mt-4 text-center text-sm">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setErrors({ email: "", password: "", name: "" });
-              }}
+            Already have an account?{" "}
+            <Button
+              variant="link"
+              className="text-primary p-0 h-auto"
+              onClick={() => router.push("/politician-signin")}
             >
-              {isLogin ? "Sign up" : "Sign in"}
-            </button>
+              Sign in
+            </Button>
           </div>
-
-          
-
-          
         </div>
       </div>
     </div>
